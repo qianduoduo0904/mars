@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import argparse
 import itertools
 
 import cloudpickle
@@ -21,6 +22,7 @@ import pandas as pd
 import mars
 import mars.remote as mr
 from mars.core.context import get_context
+from mars.lib.nvutils import get_device_count
 from mars.utils import Timer, readable_size
 
 
@@ -86,18 +88,13 @@ def _fetch_data(data_key: str, band: str = None):
     return timer.duration
 
 
-class TransferPackageSuite:
-    """
-    Benchmark that times performance of storage transfer
-    """
-
+class _TransferPackageSuite:
     def setup(self):
         try:
             # make sure all submodules will serial functions instead of refs
             cloudpickle.register_pickle_by_value(__import__("benchmarks.storage"))
         except (AttributeError, ImportError):
             pass
-        mars.new_session(n_worker=2, n_cpu=8)
 
     def teardown(self):
         mars.stop_server()
@@ -106,12 +103,49 @@ class TransferPackageSuite:
         except (AttributeError, ImportError):
             pass
 
+
+class TransferPackageSuite(_TransferPackageSuite):
+    """
+    Benchmark that times performance of storage transfer
+    """
+
+    def setup(self):
+        super().setup()
+        mars.new_session(n_worker=2, n_cpu=8)
+
     def time_1_to_1(self):
         return mr.spawn(send_1_to_1).execute().fetch()
 
 
+class GPUTransferPackageSuite(_TransferPackageSuite):
+    """
+    Benchmark that times performance of GPU storage transfer
+    """
+
+    def setup(self):
+        super().setup()
+
+        gpu_count = get_device_count() or 0
+        if not gpu_count:
+            raise NotImplementedError
+
+        mars.new_session(n_cpu=2, cuda_devices=tuple(range(gpu_count)))
+
+    def time_1_to_1(self):
+        return mr.spawn(send_1_to_1, kwargs=dict(cpu=False)).execute().fetch()
+
+
 if __name__ == "__main__":
-    suite = TransferPackageSuite()
+    parser = argparse.ArgumentParser(description="asv storage")
+    parser.add_argument(
+        "--gpu", "-g", action="store_true", help="Use GPU to read parquet"
+    )
+
+    args = parser.parse_args()
+    if args.gpu:
+        suite = GPUTransferPackageSuite()
+    else:
+        suite = TransferPackageSuite()
     suite.setup()
     print(suite.time_1_to_1())
     suite.teardown()
