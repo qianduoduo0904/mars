@@ -78,7 +78,7 @@ from ._utils import (  # noqa: F401 # pylint: disable=unused-import
     Timer,
 )
 from .lib.version import parse as parse_version
-from .typing import ChunkType, TileableType, EntityType, OperandType
+from .typing import ChunkType, TileableType, EntityType, OperandType, BandType
 
 logger = logging.getLogger(__name__)
 random.seed(int(time.time()) * os.getpid())
@@ -1893,3 +1893,9 @@ def clean_mars_tmp_dir():
                 # on windows platform, raise Permission Error
                 _windows: bool = sys.platform.startswith("win")
                 shutil.rmtree(mars_tmp_dir, ignore_errors=_windows)
+
+
+def is_gpu_band(band: BandType) -> bool:
+    if band is None:
+        return False
+    return band[1].startswith("gpu-")

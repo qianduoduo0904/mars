@@ -169,11 +169,13 @@ class ThreadedServiceContext(Context):
 
     async def _get_chunks_result(self, data_keys: List[str]) -> List:
         metas = await self._get_chunks_meta(data_keys, fields=["bands"])
-        addresses = [meta["bands"][0][0] for meta in metas]
+        bands = [meta["bands"][0] for meta in metas]
 
         storage_api_to_gets = defaultdict(lambda: (list(), list()))
-        for data_key, address in zip(data_keys, addresses):
-            storage_api = await StorageAPI.create(self.session_id, address)
+        for data_key, (address, band_name) in zip(data_keys, bands):
+            storage_api = await StorageAPI.create(
+                self.session_id, address, band_name=band_name
+            )
             storage_api_to_gets[storage_api][0].append(data_key)
             storage_api_to_gets[storage_api][1].append(storage_api.get.delay(data_key))
         results = dict()
@@ -187,7 +189,9 @@ class ThreadedServiceContext(Context):
         metas = await self._get_chunks_meta(data_keys, fields=["bands"])
         bands = [meta["bands"][0] for meta in metas]
 
-        storage_api = await StorageAPI.create(self.session_id, self.local_address)
+        storage_api = await StorageAPI.create(
+            self.session_id, self.local_address, band_name=self.band[1]
+        )
         fetches = []
         for data_key, (address, band_name) in zip(data_keys, bands):
             fetches.append(

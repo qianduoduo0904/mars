@@ -16,6 +16,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, Type, Any
 
 from .....resource import Resource
+from .....utils import is_gpu_band
 
 
 _name_to_resource_evaluator: Dict[str, Type["ResourceEvaluator"]] = {}
@@ -28,7 +29,9 @@ def register_resource_evaluator(evaluator_cls: Type["ResourceEvaluator"]):
 
 def init_default_resource_for_subtask(subtask_graph: "SubtaskGraph"):  # noqa: F821
     for subtask in subtask_graph.iter_nodes():
-        is_gpu = any(c.op.gpu for c in subtask.chunk_graph)
+        is_gpu = any(
+            c.op.gpu or is_gpu_band(c.op.expect_band) for c in subtask.chunk_graph
+        )
         subtask.required_resource = (
             Resource(num_gpus=1) if is_gpu else Resource(num_cpus=1)
         )

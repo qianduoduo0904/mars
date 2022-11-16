@@ -36,6 +36,8 @@ _id_to_buffers = dict()
 
 
 class CudaFileObject:
+    _CudaBuffer = None
+
     def __init__(self, mode: str, object_id: str, size: int = None):
         self._mode = mode
         self._object_id = object_id
@@ -54,6 +56,19 @@ class CudaFileObject:
             self._initialize_read()
         elif "w" in mode:
             self._initialize_write()
+
+    @staticmethod
+    def _init_cuda_buffer_cls():
+        if CudaFileObject._CudaBuffer is not None:
+            return CudaFileObject._CudaBuffer
+
+        from cudf.core.buffer import Buffer
+
+        # Buffer does not implement __len__, create a new class to provide this method
+        CudaBuffer = CudaFileObject._CudaBuffer = type(
+            "CudaBuffer", (Buffer,), {"__len__": lambda self: self.size}
+        )
+        return CudaBuffer
 
     @property
     def object_id(self):
@@ -84,7 +99,9 @@ class CudaFileObject:
                     # empty buffer cannot construct a UnownedMemory
                     self._buffers.append(None)
                 else:
-                    self._buffers.append(UnownedMemory(ptr, size, Buffer(ptr, size)))
+                    self._buffers.append(
+                        UnownedMemory(ptr, size, Buffer(ptr, size=size))
+                    )
                 buffer_types.append(["cuda", size])
             else:
                 size = getattr(buf, "size", len(buf))
@@ -101,9 +118,10 @@ class CudaFileObject:
     def read(self, size: int):
         # we read cuda_header first and then read cuda buffers one by one,
         # the return value's size is not exactly the specified size.
-        from cudf.core.buffer import Buffer
         from cupy.cuda import MemoryPointer
         from cupy.cuda.memory import UnownedMemory
+
+        CudaBuffer = self._init_cuda_buffer_cls()
 
         if not self._has_read_headers:
             self._has_read_headers = True
@@ -114,14 +132,14 @@ class CudaFileObject:
         # current buf read to end
         if cur_buf is None:
             # empty cuda buffer
-            content = Buffer.empty(0)
+            content = CudaBuffer.empty(0)
             self._offset = 0
             self._buffers.pop(0)
             return content
         elif size >= cur_buf.size - self._offset:
             if isinstance(cur_buf, UnownedMemory):
                 cupy_pointer = MemoryPointer(cur_buf, self._offset)
-                content = Buffer(cupy_pointer.ptr, size=cur_buf.size - self._offset)
+                content = CudaBuffer(cupy_pointer.ptr, size=cur_buf.size - self._offset)
             else:
                 content = cur_buf[self._offset : self._offset + size]
             self._offset = 0
@@ -131,7 +149,7 @@ class CudaFileObject:
             if isinstance(cur_buf, UnownedMemory):
                 cupy_pointer = MemoryPointer(cur_buf, self._offset)
                 self._offset += size
-                return Buffer(cupy_pointer.ptr, size=size)
+                return CudaBuffer(cupy_pointer.ptr, size=size)
             else:
                 self._offset += size
                 return cur_buf[self._offset, self._offset + size]

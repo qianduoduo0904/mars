@@ -88,7 +88,8 @@ class SenderManagerActor(mo.StatelessActor):
                 self._eof_marks.append(eof_mark)
                 self._buffers.append(buffer)
                 self._send_keys.append(key)
-                if sum(len(b) for b in self._buffers) >= block_size:
+                buffer_size = sum(getattr(b, "size", len(b)) for b in self._buffers)
+                if buffer_size >= block_size:
                     await self.flush()
 
         sender = BufferedSender()

@@ -23,7 +23,9 @@ import mars
 import mars.remote as mr
 from mars.core.context import get_context
 from mars.lib.nvutils import get_device_count
-from mars.utils import Timer, readable_size
+from mars.utils import Timer, readable_size, lazy_import
+
+cudf = lazy_import('cudf')
 
 
 def send_1_to_1(n: int = None, cpu: bool = True):
@@ -35,7 +37,7 @@ def send_1_to_1(n: int = None, cpu: bool = True):
     ]
 
     band_to_gen_data = {
-        b: mr.spawn(_gen_data, kwargs=dict(n=n, band=b), expect_band=b)
+        b: mr.spawn(_gen_data, kwargs=dict(n=n, band=b, cpu=cpu), expect_band=b)
         for i, b in enumerate(bands)
     }
     all_data = mars.execute(list(band_to_gen_data.values()))
@@ -65,7 +67,7 @@ def send_1_to_1(n: int = None, cpu: bool = True):
     return bands_to_durations
 
 
-def _gen_data(n: int = None, band: str = None, check_addr: bool = True) -> pd.DataFrame:
+def _gen_data(n: int = None, band: str = None, check_addr: bool = True, cpu: bool = True) -> pd.DataFrame:
     if check_addr:
         ctx = get_context()
         assert ctx.band == band
@@ -76,7 +78,11 @@ def _gen_data(n: int = None, band: str = None, check_addr: bool = True) -> pd.Da
         "b": rs.randint(n * 10, size=n),
         "c": [f"foo{i}" for i in range(n)],
     }
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    if cpu:
+        return df
+    else:
+        return cudf.DataFrame.from_pandas(df)
 
 
 def _fetch_data(data_key: str, band: str = None):
@@ -138,7 +144,7 @@ class GPUTransferPackageSuite(_TransferPackageSuite):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="asv storage")
     parser.add_argument(
-        "--gpu", "-g", action="store_true", help="Use GPU to read parquet"
+        "--gpu", "-g", action="store_true", help="Use GPU"
     )
 
     args = parser.parse_args()

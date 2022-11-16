@@ -496,7 +496,7 @@ class StorageHandlerActor(mo.Actor):
         for data_key, info in zip(data_keys, data_infos):
             # for gpu bands, need transfer between gpu cards
             if info is not None:
-                if band_name and band_name != info.band:
+                if band_name and self._band_name != info.band:
                     missing_keys.append(data_key)
                 else:
                     pin_delays.append(
