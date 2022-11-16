@@ -25,7 +25,7 @@ from mars.core.context import get_context
 from mars.lib.nvutils import get_device_count
 from mars.utils import Timer, readable_size, lazy_import
 
-cudf = lazy_import('cudf')
+cudf = lazy_import("cudf")
 
 
 def send_1_to_1(n: int = None, cpu: bool = True):
@@ -67,7 +67,9 @@ def send_1_to_1(n: int = None, cpu: bool = True):
     return bands_to_durations
 
 
-def _gen_data(n: int = None, band: str = None, check_addr: bool = True, cpu: bool = True) -> pd.DataFrame:
+def _gen_data(
+    n: int = None, band: str = None, check_addr: bool = True, cpu: bool = True
+) -> pd.DataFrame:
     if check_addr:
         ctx = get_context()
         assert ctx.band == band
@@ -132,10 +134,15 @@ class GPUTransferPackageSuite(_TransferPackageSuite):
         super().setup()
 
         gpu_count = get_device_count() or 0
-        if not gpu_count:
+        if not gpu_count or gpu_count < 2:
             raise NotImplementedError
 
-        mars.new_session(n_cpu=2, cuda_devices=tuple(range(gpu_count)))
+        # each worker owns 1 GPU
+        mars.new_session(
+            n_cpu=2 * gpu_count,
+            n_worker=gpu_count,
+            cuda_devices=tuple((i,) for i in range(gpu_count)),
+        )
 
     def time_1_to_1(self):
         return mr.spawn(send_1_to_1, kwargs=dict(cpu=False)).execute().fetch()
@@ -143,9 +150,7 @@ class GPUTransferPackageSuite(_TransferPackageSuite):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="asv storage")
-    parser.add_argument(
-        "--gpu", "-g", action="store_true", help="Use GPU"
-    )
+    parser.add_argument("--gpu", "-g", action="store_true", help="Use GPU")
 
     args = parser.parse_args()
     if args.gpu:

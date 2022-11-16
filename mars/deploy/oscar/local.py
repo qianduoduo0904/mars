@@ -198,7 +198,11 @@ class LocalCluster:
 
         else:  # pragma: no cover
             if isinstance(cuda_devices[0], int):
-                assert n_worker == 1
+                if n_worker != 1:
+                    raise ValueError(
+                        "If n_worker !=  1, cuda_devices should be specified as tuple of tuple, "
+                        "for instance, n_worker = 2, cuda_devices = ((0,), (1,))"
+                    )
                 return [cuda_devices]
             else:
                 assert len(cuda_devices) == n_worker
