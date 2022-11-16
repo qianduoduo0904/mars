@@ -88,7 +88,7 @@ class SenderManagerActor(mo.StatelessActor):
                 self._eof_marks.append(eof_mark)
                 self._buffers.append(buffer)
                 self._send_keys.append(key)
-                buffer_size = sum(getattr(b, "size", len(b)) for b in self._buffers)
+                buffer_size = sum(b.size if hasattr(b, 'size') else len(b) for b in self._buffers)
                 if buffer_size >= block_size:
                     await self.flush()
 
@@ -111,11 +111,20 @@ class SenderManagerActor(mo.StatelessActor):
                 # when a `read` request returns nothing, rather than comparing the `sent_size`
                 # and the `store_size`.
                 #
-                is_eof = not part_data  # can be non-empty bytes, empty bytes and None
+                is_eof = self._is_eof(part_data)  # can be non-empty bytes, empty bytes and None
                 await sender.send(part_data, is_eof, data_key)
                 if is_eof:
                     break
         await sender.flush()
+
+    @staticmethod
+    def _is_eof(data) -> bool:
+        try:
+            return not data
+        except AttributeError:
+            if hasattr(data, 'size'):
+                return data.size == 0
+            raise
 
     @mo.extensible
     async def send_batch_data(
