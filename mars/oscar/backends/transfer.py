@@ -18,6 +18,7 @@ import sys
 from typing import List, Union
 
 from ...lib.aio import AioFileObject
+from ...utils import get_buffer_size
 from ..core import BufferRef, FileObjectRef
 from .communication import Client, Channel
 from .message import (
@@ -34,13 +35,6 @@ from .router import Router
 
 
 DEFAULT_TRANSFER_BLOCK_SIZE = 4 * 1024**2
-
-
-def _get_buffer_size(buf) -> int:
-    try:
-        return buf.nbytes
-    except AttributeError:  # pragma: no cover
-        return len(buf)
 
 
 class TransferClient:
@@ -124,7 +118,7 @@ class TransferClient:
                     * DEFAULT_TRANSFER_BLOCK_SIZE : (i + 1)
                     * DEFAULT_TRANSFER_BLOCK_SIZE
                 ]
-                size = _get_buffer_size(curr_buf)
+                size = get_buffer_size(curr_buf)
                 if size == 0:
                     break
                 await client.send(curr_buf)
@@ -162,7 +156,7 @@ class TransferClient:
             for fileobj in local_file_objects:
                 while True:
                     buf = await fileobj.read(DEFAULT_TRANSFER_BLOCK_SIZE)
-                    size = _get_buffer_size(buf)
+                    size = get_buffer_size(buf)
                     if size > 0:
                         await client.send(buf)
                         # ack
@@ -235,12 +229,12 @@ class TransferServer:
         cls, message: CopytoBuffersMessage, buffers: list, channel: Channel
     ):
         for buffer in buffers:
-            size = _get_buffer_size(buffer)
+            size = get_buffer_size(buffer)
             acc = 0
             while True:
                 async with _catch_error(channel, message.message_id):
                     recv_buffer = await channel.recv()
-                    cur_size = _get_buffer_size(recv_buffer)
+                    cur_size = get_buffer_size(recv_buffer)
                     buffer[acc : acc + cur_size] = recv_buffer
                 acc += cur_size
                 if acc >= size:

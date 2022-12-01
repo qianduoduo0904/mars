@@ -28,6 +28,7 @@ from ...lib.filesystem import LocalFileSystem
 from ...lib.sparse import SparseNDArray, SparseMatrix
 from ...serialization import AioSerializer, AioDeserializer
 from ...tests.core import require_ray, require_cudf, require_cupy
+from ...utils import get_buffer_size
 from ..base import StorageLevel
 from ..cuda import CudaStorage
 from ..filesystem import DiskStorage
@@ -321,7 +322,7 @@ async def test_cuda_backend():
     async with await storage.open_reader(put_info1.object_id) as reader:
         while True:
             content = await reader.read(read_chunk)
-            if content:
+            if get_buffer_size(content):
                 await writer.write(content)
             else:
                 break
