@@ -62,6 +62,7 @@ from .message import (
     ControlMessageType,
 )
 from .router import Router
+from .transfer import TransferServer
 
 logger = logging.getLogger(__name__)
 ray = lazy_import("ray")
@@ -494,6 +495,7 @@ class AbstractActorPool(ABC):
         return self._stopped.is_set()
 
     async def on_new_channel(self, channel: Channel):
+        is_transfer = False
         while not self._stopped.is_set():
             try:
                 message = await channel.recv()
@@ -505,10 +507,22 @@ class AbstractActorPool(ABC):
                     # close failed, ignore
                     pass
                 return
+            if (
+                message.message_type == MessageType.control
+                and message.control_message_type
+                == ControlMessageType.switch_to_transfer
+            ):
+                # switch this channel to data transfer channel
+                # the channel will be handed over to TansferServer
+                is_transfer = True
+                break
             asyncio.create_task(self.process_message(message, channel))
             # delete to release the reference of message
             del message
             await asyncio.sleep(0)
+
+        if is_transfer:
+            await TransferServer.handle_transfer_channel(channel)
 
     async def __aenter__(self):
         await self.start()
